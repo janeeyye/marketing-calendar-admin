@@ -13,8 +13,8 @@ const SOLUTION_COLOR = {
   "Security":"var(--sol-security)","All CSAs":"var(--sol-all-csas)",
 };
 const SOLUTION_HEX = {
-  "AI Business Solutions":"#a371f7","Cloud and AI Platforms":"#58a6ff",
-  "Security":"#f0883e","All CSAs":"#3fb950",
+  "AI Business Solutions":"#7c3aed","Cloud and AI Platforms":"#2563eb",
+  "Security":"#ea580c","All CSAs":"#16a34a",
 };
 
 // ── State ──
@@ -187,9 +187,35 @@ function renderCalendar(){
           card.className = "event-card";
           card.style.borderLeftColor = color;
           card.addEventListener("click", e=>{ e.stopPropagation(); openEditEvent(ev); });
+
           const t = document.createElement("div");
           t.className = "event-title"; t.textContent = ev.title||"(Untitled)";
           card.appendChild(t);
+
+          if(ev.location){
+            const loc = document.createElement("div");
+            loc.className = "event-location";
+            const pin = document.createElement("span");
+            pin.className = "pin"; pin.textContent = "📍";
+            const locText = document.createElement("span");
+            locText.textContent = ev.location;
+            loc.append(pin, locText);
+            card.appendChild(loc);
+          }
+
+          if(ev.registrationUrl && ev.registrationUrl.trim()){
+            const links = document.createElement("div");
+            links.className = "event-links";
+            const a = document.createElement("a");
+            a.href = ev.registrationUrl;
+            a.target = "_blank";
+            a.rel = "noreferrer";
+            a.textContent = "등록하러 가기❯";
+            a.addEventListener("click", e => e.stopPropagation());
+            links.appendChild(a);
+            card.appendChild(links);
+          }
+
           stack.appendChild(card);
         } else {
           const cont = document.createElement("div");
