@@ -401,6 +401,7 @@ function openAddEvent(defaultDate){
   $("formLocation").value = "";
   $("formTime").value = "";
   $("formRegUrl").value = "";
+  $("eventFormDelete").classList.add("hidden");
   openModal("eventModal");
 }
 
@@ -414,6 +415,7 @@ function openEditEvent(ev){
   $("formLocation").value = ev.location||"";
   $("formTime").value = ev.time||"";
   $("formRegUrl").value = ev.registrationUrl||"";
+  $("eventFormDelete").classList.remove("hidden");
   openModal("eventModal");
 }
 
@@ -594,6 +596,13 @@ document.addEventListener("DOMContentLoaded", ()=>{
   $("eventForm").addEventListener("submit", e=>{ e.preventDefault(); saveEvent(); });
   $("eventModalClose").addEventListener("click", ()=>closeModal("eventModal"));
   $("eventFormCancel").addEventListener("click", ()=>closeModal("eventModal"));
+  $("eventFormDelete").addEventListener("click", ()=>{
+    const id = $("formEventId").value;
+    if(id && confirm("이 이벤트를 삭제하시겠습니까?")){
+      deleteEvent(id);
+      closeModal("eventModal");
+    }
+  });
 
   // Sidebar form
   $("sidebarForm").addEventListener("submit", e=>{ e.preventDefault(); saveSidebarItem(); });
