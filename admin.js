@@ -79,7 +79,9 @@ async function loadFromGitHub(){
   try{
     const data = await ghFetch(`/repos/${settings.owner}/${settings.repo}/contents/${settings.path}`);
     fileSha = data.sha;
-    const json = JSON.parse(atob(data.content.replace(/\n/g,"")));
+    const binary = atob(data.content.replace(/\n/g,""));
+    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+    const json = JSON.parse(new TextDecoder("utf-8").decode(bytes));
     allEvents = (Array.isArray(json) ? json : (json.events||[])).map((e,i)=>({id:e.id||uid(),...e}));
     highlights = Array.isArray(json) ? [] : (json.highlights||[]);
     onDemand   = Array.isArray(json) ? [] : (json.onDemand||[]);
@@ -99,7 +101,7 @@ async function publishToGitHub(){
   if(!settings.pat){ toast("GitHub PAT를 설정해주세요","error"); return; }
   const msg = $("commitMessage").value.trim() || "캘린더 업데이트";
   const jsonObj = { events:allEvents, highlights, onDemand, quickLinks };
-  const content = btoa(unescape(encodeURIComponent(JSON.stringify(jsonObj, null, 2))));
+  const content = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(jsonObj, null, 2))));
   try{
     const body = { message:msg, content };
     if(fileSha) body.sha = fileSha;
