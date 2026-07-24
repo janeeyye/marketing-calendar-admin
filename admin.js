@@ -302,47 +302,80 @@ function renderEventList(){
 
 function esc(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
 
-// ── Render Sidebar Panels ──
+// ── Render Sidebar Panels (public-page style with edit controls) ──
 function renderSidebarPanel(section, items, containerId){
   const container = $(containerId);
   container.innerHTML = "";
 
-  items.forEach((item, idx)=>{
-    const card = document.createElement("div");
-    card.className = "sidebar-item-card";
-    const hex = SOLUTION_HEX[item.solution]||"#8b949e";
-    card.innerHTML = `
-      <div class="item-info">
-        <div class="item-title">${esc(item.title||"(Untitled)")}</div>
-        <div class="item-meta">${esc(item.metaText||item.meta||"")} ${item.url ? '🔗' : ''}</div>
-      </div>
-    `;
-    const actions = document.createElement("div");
-    actions.className = "item-actions";
+  if(section==="highlights"){
+    items.forEach((item, idx)=>{
+      const hex = SOLUTION_HEX[item.solution]||"#6b7280";
+      const card = document.createElement("div");
+      card.className = "highlight-card";
+      card.style.borderLeftColor = hex;
+      card.addEventListener("click", ()=>openEditSidebarItem(section, idx));
 
-    const editBtn = document.createElement("button");
-    editBtn.className = "btn btn-ghost btn-sm"; editBtn.textContent = "편집";
-    editBtn.addEventListener("click", ()=>openEditSidebarItem(section, idx));
+      let html = `<div class="highlight-title">${esc(item.title||"(Untitled)")}</div>`;
+      if(item.metaText||item.meta) html += `<div class="highlight-meta">${esc(item.metaText||item.meta)}</div>`;
+      if(item.description) html += `<div class="highlight-description">${esc(item.description)}</div>`;
+      if(item.url) html += `<a class="sidebar-link" href="${esc(item.url)}" target="_blank" rel="noreferrer" onclick="event.stopPropagation()">자세히 보기 ❯</a>`;
+      html += `<div class="highlight-actions">
+        <button class="btn btn-danger btn-sm" data-del="${idx}">삭제</button>
+      </div>`;
+      card.innerHTML = html;
 
-    const delBtn = document.createElement("button");
-    delBtn.className = "btn btn-danger btn-sm"; delBtn.textContent = "삭제";
-    delBtn.addEventListener("click", ()=>{
-      if(confirm(`"${item.title}" 삭제?`)){
-        getSidebarArray(section).splice(idx,1);
-        markDirty(); renderSidebarSection(section);
-      }
+      const delBtn = card.querySelector(`[data-del="${idx}"]`);
+      if(delBtn) delBtn.addEventListener("click", e=>{
+        e.stopPropagation();
+        if(confirm(`"${item.title}" 삭제?`)){ getSidebarArray(section).splice(idx,1); markDirty(); renderSidebarSection(section); }
+      });
+
+      container.appendChild(card);
     });
-
-    actions.append(editBtn, delBtn);
-    card.appendChild(actions);
-    container.appendChild(card);
-  });
-
-  const addBtn = document.createElement("button");
-  addBtn.className = "sidebar-add-btn";
-  addBtn.textContent = "＋ 항목 추가";
-  addBtn.addEventListener("click", ()=>openAddSidebarItem(section));
-  container.appendChild(addBtn);
+  } else if(section==="onDemand"){
+    items.forEach((item, idx)=>{
+      const row = document.createElement("div");
+      row.className = "ondemand-item";
+      row.addEventListener("click", ()=>openEditSidebarItem(section, idx));
+      row.innerHTML = `
+        <span class="ondemand-icon">▶</span>
+        <div class="ondemand-copy">
+          <div class="ondemand-title">${esc(item.title||"(Untitled)")}</div>
+          ${item.metaText||item.meta ? `<div class="ondemand-date">${esc(item.metaText||item.meta)}</div>` : ""}
+        </div>
+        <div class="ondemand-actions">
+          <button class="btn btn-danger btn-sm" data-del="${idx}">삭제</button>
+        </div>
+        <span class="ondemand-arrow">❯</span>
+      `;
+      const delBtn = row.querySelector(`[data-del="${idx}"]`);
+      if(delBtn) delBtn.addEventListener("click", e=>{
+        e.stopPropagation();
+        if(confirm(`"${item.title}" 삭제?`)){ getSidebarArray(section).splice(idx,1); markDirty(); renderSidebarSection(section); }
+      });
+      container.appendChild(row);
+    });
+  } else {
+    items.forEach((item, idx)=>{
+      const row = document.createElement("div");
+      row.className = "quicklink-item";
+      row.addEventListener("click", ()=>openEditSidebarItem(section, idx));
+      row.innerHTML = `
+        <span class="quicklink-icon">↗</span>
+        <span class="quicklink-title">${esc(item.title||"(Untitled)")}</span>
+        <div class="quicklink-actions">
+          <button class="btn btn-danger btn-sm" data-del="${idx}">삭제</button>
+        </div>
+        <span class="quicklink-arrow">❯</span>
+      `;
+      const delBtn = row.querySelector(`[data-del="${idx}"]`);
+      if(delBtn) delBtn.addEventListener("click", e=>{
+        e.stopPropagation();
+        if(confirm(`"${item.title}" 삭제?`)){ getSidebarArray(section).splice(idx,1); markDirty(); renderSidebarSection(section); }
+      });
+      container.appendChild(row);
+    });
+  }
 }
 
 function getSidebarArray(section){
@@ -549,13 +582,10 @@ document.addEventListener("DOMContentLoaded", ()=>{
   $("nextMonthBtn").addEventListener("click", ()=>{ currentDate=new Date(currentDate.getFullYear(),currentDate.getMonth()+1,1); renderCalendar(); });
   $("todayBtn").addEventListener("click", ()=>{ currentDate=new Date(); renderCalendar(); });
 
-  // View tabs
-  document.querySelectorAll(".view-tabs .tab").forEach(t=>{
-    t.addEventListener("click", ()=>switchView(t.dataset.view));
-  });
-  document.querySelectorAll(".sidebar-tabs .stab").forEach(t=>{
-    t.addEventListener("click", ()=>switchSidebarTab(t.dataset.section));
-  });
+  // Sidebar add buttons
+  $("btnAddHighlight").addEventListener("click", ()=>openAddSidebarItem("highlights"));
+  $("btnAddOnDemand").addEventListener("click", ()=>openAddSidebarItem("onDemand"));
+  $("btnAddQuickLink").addEventListener("click", ()=>openAddSidebarItem("quickLinks"));
 
   // Add event button
   $("btnAddEvent").addEventListener("click", ()=>openAddEvent());

@@ -58,24 +58,43 @@
         </div>
       </header>
 
-      <!-- View Tabs -->
-      <div class="view-tabs">
-        <button class="tab active" data-view="calendar">📅 캘린더</button>
-        <button class="tab" data-view="list">📋 이벤트 목록</button>
-        <button class="tab" data-view="sidebar">📌 사이드바 관리</button>
-      </div>
-
-      <!-- Calendar View -->
+      <!-- Calendar + Sidebar Layout -->
       <section class="view-panel" id="viewCalendar">
         <div class="filters" id="filterBar"></div>
-        <div class="calendar-shell">
-          <div class="weekday-row">
-            <div class="weekday">Sun</div><div class="weekday">Mon</div>
-            <div class="weekday">Tue</div><div class="weekday">Wed</div>
-            <div class="weekday">Thu</div><div class="weekday">Fri</div>
-            <div class="weekday">Sat</div>
+        <div class="content-layout">
+          <div class="calendar-shell">
+            <div class="weekday-row">
+              <div class="weekday">Sun</div><div class="weekday">Mon</div>
+              <div class="weekday">Tue</div><div class="weekday">Wed</div>
+              <div class="weekday">Thu</div><div class="weekday">Fri</div>
+              <div class="weekday">Sat</div>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
           </div>
-          <div class="calendar-grid" id="calendarGrid"></div>
+
+          <aside class="sidebar">
+            <section class="sidebar-section">
+              <div class="sidebar-heading">
+                <h2>🔥 이번 달 하이라이트</h2>
+                <button class="btn btn-ghost btn-sm" id="btnAddHighlight">＋</button>
+              </div>
+              <div id="sidebarHighlights" class="highlight-list"></div>
+            </section>
+            <section class="sidebar-section">
+              <div class="sidebar-heading">
+                <h2>▶ 다시보기</h2>
+                <button class="btn btn-ghost btn-sm" id="btnAddOnDemand">＋</button>
+              </div>
+              <div id="sidebarOnDemand" class="ondemand-list"></div>
+            </section>
+            <section class="sidebar-section compact">
+              <div class="sidebar-heading">
+                <h2>↗ 바로가기</h2>
+                <button class="btn btn-ghost btn-sm" id="btnAddQuickLink">＋</button>
+              </div>
+              <div id="sidebarQuickLinks" class="quicklink-list"></div>
+            </section>
+          </aside>
         </div>
       </section>
 
@@ -105,20 +124,6 @@
             </thead>
             <tbody id="eventTableBody"></tbody>
           </table>
-        </div>
-      </section>
-
-      <!-- Sidebar Management View -->
-      <section class="view-panel hidden" id="viewSidebar">
-        <div class="sidebar-tabs">
-          <button class="stab active" data-section="highlights">🔥 하이라이트</button>
-          <button class="stab" data-section="onDemand">▶ 다시보기</button>
-          <button class="stab" data-section="quickLinks">↗ 바로가기</button>
-        </div>
-        <div class="sidebar-content">
-          <div class="sidebar-section-panel" id="sidebarHighlights"></div>
-          <div class="sidebar-section-panel hidden" id="sidebarOnDemand"></div>
-          <div class="sidebar-section-panel hidden" id="sidebarQuickLinks"></div>
         </div>
       </section>
     </div>

@@ -12,7 +12,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--foreground);line-h
 
 /* ── Page layout ── */
 .page{min-height:100vh;display:flex;flex-direction:column}
-.container{max-width:1200px;width:100%;margin:0 auto;padding:0 24px 40px}
+.container{max-width:1440px;width:100%;margin:0 auto;padding:0 24px 40px}
 
 /* ── Settings Bar ── */
 .settings-bar{background:var(--surface);border-bottom:1px solid var(--border)}
@@ -87,6 +87,51 @@ body{font-family:var(--font);background:var(--bg);color:var(--foreground);line-h
   background:var(--card);color:var(--foreground);font:500 12px var(--font);cursor:pointer;
 }
 .filter-pill.active{color:#fff}
+
+/* ── Content layout (calendar + sidebar) ── */
+.content-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start}
+
+/* ── Sidebar ── */
+.sidebar{display:flex;flex-direction:column;gap:14px;position:sticky;top:18px}
+.sidebar-section{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  box-shadow:0 1px 2px rgba(0,0,0,.05);padding:16px;
+}
+.sidebar-section.compact{padding-bottom:10px}
+.sidebar-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.sidebar-heading h2{margin:0;font-size:15px;font-weight:700}
+
+.highlight-list{display:flex;flex-direction:column;gap:10px}
+.highlight-card{
+  padding:12px 12px 12px 14px;border:1px solid var(--border);border-left:4px solid var(--muted);
+  border-radius:10px;background:#fff;cursor:pointer;position:relative;
+}
+.highlight-card:hover{background:#faf9f6}
+.highlight-title{font-size:14px;font-weight:700;line-height:1.45;margin-bottom:4px}
+.highlight-meta{font-size:12px;color:var(--muted);margin-bottom:6px}
+.highlight-description{font-size:13px;line-height:1.55;margin-bottom:8px;color:#444}
+.sidebar-link{display:inline-flex;font-size:13px;font-weight:600;color:var(--accent);text-decoration:none}
+.sidebar-link:hover{text-decoration:underline}
+
+.ondemand-list,.quicklink-list{display:flex;flex-direction:column}
+.ondemand-item,.quicklink-item{
+  display:flex;align-items:center;gap:10px;padding:10px 0;
+  border-top:1px solid var(--border);color:var(--foreground);text-decoration:none;cursor:pointer;
+}
+.ondemand-item:first-child,.quicklink-item:first-child{border-top:none;padding-top:2px}
+.ondemand-icon,.quicklink-icon{
+  flex:0 0 auto;width:24px;height:24px;border:1px solid var(--border);border-radius:999px;
+  display:inline-flex;align-items:center;justify-content:center;font-size:10px;
+}
+.ondemand-copy{min-width:0;flex:1}
+.ondemand-title{font-size:13px;font-weight:600;line-height:1.4}
+.ondemand-date{font-size:11px;color:var(--muted);margin-top:2px}
+.ondemand-arrow,.quicklink-arrow{margin-left:auto;color:var(--muted);font-size:14px}
+.quicklink-title{font-size:13px;font-weight:500}
+.highlight-actions{position:absolute;top:8px;right:8px;display:none;gap:4px}
+.highlight-card:hover .highlight-actions{display:flex}
+.ondemand-actions,.quicklink-actions{display:none;gap:4px;margin-left:auto}
+.ondemand-item:hover .ondemand-actions,.quicklink-item:hover .quicklink-actions{display:flex}
 
 /* ── Calendar grid ── */
 .calendar-shell{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
@@ -218,4 +263,6 @@ body{font-family:var(--font);background:var(--bg);color:var(--foreground);line-h
   .settings-grid{grid-template-columns:1fr}
   .header{flex-direction:column;align-items:flex-start}
   .day{min-height:80px}
+  .content-layout{grid-template-columns:1fr}
+  .sidebar{position:static}
 }
