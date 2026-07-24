@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Marketing Calendar – Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./admin.css" />
+</head>
+<body>
+  <div class="page">
+    <!-- Settings Bar (collapsible) -->
+    <div class="settings-bar" id="settingsBar">
+      <button class="settings-toggle" id="settingsToggle">⚙ GitHub 연결 설정</button>
+      <div class="settings-panel hidden" id="settingsPanel">
+        <div class="settings-grid">
+          <label>
+            <span>GitHub PAT</span>
+            <input type="password" id="inputPAT" placeholder="ghp_xxxx..." />
+          </label>
+          <label>
+            <span>Repo Owner</span>
+            <input type="text" id="inputOwner" placeholder="janeeyye" />
+          </label>
+          <label>
+            <span>Repo Name</span>
+            <input type="text" id="inputRepo" placeholder="marketing-calendar-public" />
+          </label>
+          <label>
+            <span>File Path</span>
+            <input type="text" id="inputPath" placeholder="marketing-events.json" />
+          </label>
+        </div>
+        <div class="settings-actions">
+          <button class="btn btn-primary" id="btnSaveSettings">설정 저장</button>
+          <button class="btn btn-ghost" id="btnLoadFromGH">GitHub에서 불러오기</button>
+          <span class="settings-status" id="settingsStatus"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <!-- Top Bar -->
+      <header class="header">
+        <div class="header-left">
+          <div class="month-nav">
+            <button class="icon-btn" id="prevMonthBtn" aria-label="Previous month">‹</button>
+            <h1 class="month-title" id="monthTitle">—</h1>
+            <button class="icon-btn" id="nextMonthBtn" aria-label="Next month">›</button>
+          </div>
+          <button class="btn btn-ghost" id="todayBtn">Today</button>
+        </div>
+        <div class="header-right">
+          <button class="btn btn-accent" id="btnAddEvent">＋ 이벤트 추가</button>
+          <button class="btn btn-publish" id="btnPublish">🚀 게시</button>
+        </div>
+      </header>
+
+      <!-- View Tabs -->
+      <div class="view-tabs">
+        <button class="tab active" data-view="calendar">📅 캘린더</button>
+        <button class="tab" data-view="list">📋 이벤트 목록</button>
+        <button class="tab" data-view="sidebar">📌 사이드바 관리</button>
+      </div>
+
+      <!-- Calendar View -->
+      <section class="view-panel" id="viewCalendar">
+        <div class="filters" id="filterBar"></div>
+        <div class="calendar-shell">
+          <div class="weekday-row">
+            <div class="weekday">Sun</div><div class="weekday">Mon</div>
+            <div class="weekday">Tue</div><div class="weekday">Wed</div>
+            <div class="weekday">Thu</div><div class="weekday">Fri</div>
+            <div class="weekday">Sat</div>
+          </div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+        </div>
+      </section>
+
+      <!-- List View -->
+      <section class="view-panel hidden" id="viewList">
+        <div class="list-toolbar">
+          <input type="search" id="listSearch" placeholder="이벤트 검색..." />
+          <select id="listSolutionFilter">
+            <option value="">전체 솔루션</option>
+            <option value="AI Business Solutions">Copilot</option>
+            <option value="Cloud and AI Platforms">Cloud & AI</option>
+            <option value="Security">Security</option>
+            <option value="All CSAs">Multi-Solution</option>
+          </select>
+        </div>
+        <div class="event-table-wrap">
+          <table class="event-table" id="eventTable">
+            <thead>
+              <tr>
+                <th>제목</th>
+                <th>솔루션</th>
+                <th>시작일</th>
+                <th>종료일</th>
+                <th>장소</th>
+                <th>작업</th>
+              </tr>
+            </thead>
+            <tbody id="eventTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Sidebar Management View -->
+      <section class="view-panel hidden" id="viewSidebar">
+        <div class="sidebar-tabs">
+          <button class="stab active" data-section="highlights">🔥 하이라이트</button>
+          <button class="stab" data-section="onDemand">▶ 다시보기</button>
+          <button class="stab" data-section="quickLinks">↗ 바로가기</button>
+        </div>
+        <div class="sidebar-content">
+          <div class="sidebar-section-panel" id="sidebarHighlights"></div>
+          <div class="sidebar-section-panel hidden" id="sidebarOnDemand"></div>
+          <div class="sidebar-section-panel hidden" id="sidebarQuickLinks"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Event Form Modal -->
+  <div class="modal-backdrop hidden" id="eventModal">
+    <div class="modal-panel">
+      <div class="modal-inner">
+        <div class="modal-top">
+          <h2 id="eventModalTitle">이벤트 추가</h2>
+          <button class="modal-close" id="eventModalClose">✕</button>
+        </div>
+        <form id="eventForm" class="event-form">
+          <input type="hidden" id="formEventId" />
+          <label>
+            <span>제목 *</span>
+            <input type="text" id="formTitle" required />
+          </label>
+          <label>
+            <span>솔루션 *</span>
+            <select id="formSolution" required>
+              <option value="AI Business Solutions">Copilot (AI Business Solutions)</option>
+              <option value="Cloud and AI Platforms">Cloud & AI Platforms</option>
+              <option value="Security">Security</option>
+              <option value="All CSAs">Multi-Solution (All CSAs)</option>
+            </select>
+          </label>
+          <div class="form-row">
+            <label>
+              <span>시작일 *</span>
+              <input type="date" id="formStartDate" required />
+            </label>
+            <label>
+              <span>종료일</span>
+              <input type="date" id="formEndDate" />
+            </label>
+          </div>
+          <label>
+            <span>장소</span>
+            <input type="text" id="formLocation" placeholder="예: Digital(한국어), 서울 강남" />
+          </label>
+          <label>
+            <span>시간</span>
+            <input type="text" id="formTime" placeholder="예: 14:00 - 16:00" />
+          </label>
+          <label>
+            <span>등록 URL</span>
+            <input type="url" id="formRegUrl" placeholder="https://..." />
+          </label>
+          <div class="form-actions">
+            <button type="button" class="btn btn-ghost" id="eventFormCancel">취소</button>
+            <button type="submit" class="btn btn-primary" id="eventFormSubmit">저장</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar Item Form Modal -->
+  <div class="modal-backdrop hidden" id="sidebarModal">
+    <div class="modal-panel">
+      <div class="modal-inner">
+        <div class="modal-top">
+          <h2 id="sidebarModalTitle">항목 추가</h2>
+          <button class="modal-close" id="sidebarModalClose">✕</button>
+        </div>
+        <form id="sidebarForm" class="event-form">
+          <input type="hidden" id="sFormId" />
+          <input type="hidden" id="sFormSection" />
+          <label>
+            <span>제목 *</span>
+            <input type="text" id="sFormTitle" required />
+          </label>
+          <label>
+            <span>솔루션</span>
+            <select id="sFormSolution">
+              <option value="">없음</option>
+              <option value="AI Business Solutions">Copilot</option>
+              <option value="Cloud and AI Platforms">Cloud & AI</option>
+              <option value="Security">Security</option>
+              <option value="All CSAs">Multi-Solution</option>
+            </select>
+          </label>
+          <label>
+            <span>메타 텍스트</span>
+            <input type="text" id="sFormMeta" placeholder="예: 2026-01-15 | 서울" />
+          </label>
+          <label>
+            <span>설명</span>
+            <textarea id="sFormDesc" rows="2"></textarea>
+          </label>
+          <label>
+            <span>URL</span>
+            <input type="url" id="sFormUrl" placeholder="https://..." />
+          </label>
+          <label>
+            <span>표시 순서</span>
+            <input type="number" id="sFormOrder" min="0" value="0" />
+          </label>
+          <div class="form-actions">
+            <button type="button" class="btn btn-ghost" id="sidebarFormCancel">취소</button>
+            <button type="submit" class="btn btn-primary">저장</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Publish Confirm Modal -->
+  <div class="modal-backdrop hidden" id="publishModal">
+    <div class="modal-panel modal-sm">
+      <div class="modal-inner">
+        <div class="modal-top">
+          <h2>게시 확인</h2>
+          <button class="modal-close" id="publishModalClose">✕</button>
+        </div>
+        <div class="publish-summary">
+          <p>아래 내용을 <strong>공개 캘린더</strong>에 게시합니다.</p>
+          <div class="publish-stats" id="publishStats"></div>
+          <label class="commit-msg-label">
+            <span>커밋 메시지</span>
+            <input type="text" id="commitMessage" value="캘린더 업데이트" />
+          </label>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-ghost" id="publishCancel">취소</button>
+          <button class="btn btn-publish" id="publishConfirm">🚀 게시하기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="./admin.js"></script>
+</body>
+</html>
