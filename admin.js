@@ -71,6 +71,39 @@ async function ghFetch(endpoint, opts={}){
   return res.json();
 }
 
+async function autoLoadPublic(){
+  const owner = settings.owner || "janeeyye";
+  const repo = settings.repo || "marketing-calendar-public";
+  const path = settings.path || "marketing-events.json";
+  $("settingsStatus").textContent = "불러오는 중…";
+  try{
+    const url = `https://raw.githubusercontent.com/${owner}/${repo}/main/${path}`;
+    const res = await fetch(url, { cache:"no-store" });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    allEvents = (Array.isArray(json) ? json : (json.events||[])).map((e,i)=>({id:e.id||uid(),...e}));
+    highlights = Array.isArray(json) ? [] : (json.highlights||[]);
+    onDemand   = Array.isArray(json) ? [] : (json.onDemand||[]);
+    quickLinks = Array.isArray(json) ? [] : (json.quickLinks||[]);
+    // fileSha is needed for publishing; fetch it via API if PAT exists
+    if(settings.pat){
+      try{
+        const data = await ghFetch(`/repos/${owner}/${repo}/contents/${path}`);
+        fileSha = data.sha;
+      } catch(e){ console.warn("SHA fetch failed, will retry on publish", e); }
+    }
+    dirty = false;
+    $("settingsStatus").textContent = `✅ ${allEvents.length}개 이벤트 로드됨`;
+    toast(`${allEvents.length}개 이벤트를 불러왔습니다`,"success");
+    renderAll();
+  } catch(err){
+    $("settingsStatus").textContent = "❌ 로드 실패";
+    toast("이벤트 불러오기 실패: "+err.message,"error");
+    console.error(err);
+    renderAll();
+  }
+}
+
 async function loadFromGitHub(){
   if(!settings.owner||!settings.repo||!settings.path){
     toast("먼저 GitHub 설정을 입력해주세요","error"); return;
@@ -103,6 +136,13 @@ async function publishToGitHub(){
   const jsonObj = { events:allEvents, highlights, onDemand, quickLinks };
   const content = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(jsonObj, null, 2))));
   try{
+    // Ensure we have fileSha for update
+    if(!fileSha){
+      try{
+        const data = await ghFetch(`/repos/${settings.owner}/${settings.repo}/contents/${settings.path}`);
+        fileSha = data.sha;
+      } catch(e){ /* new file */ }
+    }
     const body = { message:msg, content };
     if(fileSha) body.sha = fileSha;
     const res = await ghFetch(`/repos/${settings.owner}/${settings.repo}/contents/${settings.path}`,{
@@ -646,11 +686,6 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(dirty){ e.preventDefault(); e.returnValue=""; }
   });
 
-  // Auto-load from GitHub if settings exist
-  if(settings.pat && settings.owner && settings.repo){
-    loadFromGitHub();
-  } else {
-    renderAll();
-    $("settingsPanel").classList.remove("hidden");
-  }
+  // Auto-load from public repo (no PAT needed for reading)
+  autoLoadPublic();
 });
