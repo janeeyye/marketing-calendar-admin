@@ -4,7 +4,7 @@
   --bg:#f5f0e8;--surface:#ffffff;--card:#ffffff;--border:#e0dbd3;
   --foreground:#1a1a1a;--muted:#6b7280;--accent:#2563eb;--accent-hover:#1d4ed8;
   --danger:#dc2626;--success:#16a34a;--publish:#dc2626;--publish-hover:#ef4444;
-  --sol-ai-business:#7c3aed;--sol-cloud-ai:#2563eb;--sol-security:#ea580c;--sol-all-csas:#16a34a;
+  --sol-ai-business:oklch(0.62 0.15 35);--sol-cloud-ai:oklch(0.65 0.12 160);--sol-security:oklch(0.55 0.15 240);--sol-all-csas:oklch(0.60 0.18 290);
   --radius:8px;--font:'Noto Sans KR',system-ui,sans-serif;
 }
 html{font-size:14px}

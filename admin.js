@@ -13,8 +13,8 @@ const SOLUTION_COLOR = {
   "Security":"var(--sol-security)","All CSAs":"var(--sol-all-csas)",
 };
 const SOLUTION_HEX = {
-  "AI Business Solutions":"#7c3aed","Cloud and AI Platforms":"#2563eb",
-  "Security":"#ea580c","All CSAs":"#16a34a",
+  "AI Business Solutions":"#c26a3a","Cloud and AI Platforms":"#3d9e77",
+  "Security":"#3563b0","All CSAs":"#8545c4",
 };
 
 // ── State ──
