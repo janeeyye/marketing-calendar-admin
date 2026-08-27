@@ -33,6 +33,7 @@ const $ = id => document.getElementById(id);
 
 function loadSettings(){
   try { const s=JSON.parse(localStorage.getItem("mcal_admin_settings")); if(s) settings=s; } catch(e){}
+  settings.pat = sanitizePat(settings.pat).pat; // 이전에 잘못 저장된 값 정리
   $("inputPAT").value = settings.pat||"";
   $("inputOwner").value = settings.owner||"";
   $("inputRepo").value = settings.repo||"";
@@ -47,11 +48,38 @@ function saveSettings(){
 
 // 입력창의 현재 값을 즉시 반영한다 ("설정 저장"을 누르지 않아도 게시가 동작하도록)
 function readSettingsFromInputs(){
-  settings.pat = $("inputPAT").value.trim();
+  const { pat } = sanitizePat($("inputPAT").value);
+  if($("inputPAT").value !== pat) $("inputPAT").value = pat; // 정리된 값 되돌려주기
+  settings.pat = pat;
   settings.owner = $("inputOwner").value.trim() || "janeeyye";
   settings.repo = $("inputRepo").value.trim() || "marketing-calendar-public";
   settings.path = $("inputPath").value.trim() || "marketing-events.json";
   return settings;
+}
+
+// 붙여넣기 과정에서 섞여 들어간 공백·제로폭 문자 등을 제거한다.
+// 이런 문자가 남아 있으면 fetch가 Authorization 헤더를 만들지 못하고 즉시 예외를 던진다.
+function sanitizePat(raw){
+  const pat = String(raw||"")
+    .replace(/[\s\u00a0\u200b-\u200d\ufeff]/g, "")  // 공백 / 제로폭 / BOM
+    .replace(/^["'`]+|["'`]+$/g, "")                 // 감싸는 따옴표
+    .replace(/^Bearer/i, "");                        // 실수로 함께 복사한 접두어
+  const bad = [...pat].filter(c => { const n=c.charCodeAt(0); return n<0x21 || n>0x7e; });
+  return { pat, bad };
+}
+
+// 게시/연결 테스트 전에 PAT가 헤더로 쓸 수 있는 형태인지 검사한다
+function validatePat(){
+  const { pat, bad } = sanitizePat(settings.pat);
+  if(!pat) return "GitHub PAT를 입력해주세요";
+  if(bad.length){
+    const codes = [...new Set(bad.map(c=>"U+"+c.charCodeAt(0).toString(16).toUpperCase().padStart(4,"0")))].slice(0,5).join(", ");
+    return `PAT에 토큰이 아닌 문자가 포함되어 있습니다 (${codes}). 한글이나 보이지 않는 문자가 섞여 있지 않은지 확인하고, GitHub에서 발급한 토큰(ghp_… 또는 github_pat_…)을 다시 붙여넣어 주세요.`;
+  }
+  if(!/^(ghp_|github_pat_|gho_|ghu_|ghs_)/.test(pat)){
+    return "PAT 형식이 올바르지 않습니다. GitHub에서 발급한 토큰은 ghp_ 또는 github_pat_ 로 시작합니다.";
+  }
+  return null;
 }
 
 // ── Toast ──
@@ -77,6 +105,7 @@ class GHError extends Error {
 function ghMessage(err){
   if(!(err instanceof GHError)) return err.message || "알 수 없는 오류";
   switch(err.status){
+    case 0:   return err.body;
     case 401: return "PAT가 올바르지 않거나 만료되었습니다. 새 토큰을 발급해 다시 입력해주세요.";
     case 403: return "권한이 없습니다. PAT에 Contents(쓰기) 권한이 있는지 확인해주세요. (fine-grained PAT는 해당 레포를 Repository access에 포함해야 합니다)";
     case 404: return `레포지토리 또는 파일을 찾을 수 없습니다 (${settings.owner}/${settings.repo}/${settings.path}). 경로와 PAT 권한을 확인해주세요.`;
@@ -89,7 +118,12 @@ function ghMessage(err){
 async function ghFetch(endpoint, opts={}){
   const base = "https://api.github.com";
   const headers = { Accept:"application/vnd.github+json", ...opts.headers };
-  if(settings.pat) headers.Authorization = "Bearer "+settings.pat;
+  if(settings.pat){
+    const token = "Bearer "+settings.pat;
+    // 헤더에 넣을 수 없는 문자가 있으면 fetch가 알아보기 힘든 예외를 던지므로 미리 걸러낸다
+    if(!/^[\x20-\x7e]*$/.test(token)) throw new GHError(0, validatePat()||"PAT에 사용할 수 없는 문자가 포함되어 있습니다");
+    headers.Authorization = token;
+  }
   const res = await fetch(base+endpoint, { ...opts, headers });
   if(!res.ok){
     const body = await res.text();
@@ -136,7 +170,8 @@ function applyDraft(draft){
 async function testConnection(){
   readSettingsFromInputs();
   const status = $("settingsStatus");
-  if(!settings.pat){ status.textContent = "❌ PAT를 먼저 입력해주세요"; return; }
+  const patError = validatePat();
+  if(patError){ status.textContent = "❌ "+patError; toast(patError,"error"); return; }
   status.textContent = "연결 확인 중…";
   try{
     const repoData = await ghFetch(`/repos/${settings.owner}/${settings.repo}`);
@@ -276,7 +311,13 @@ async function putContent(content, msg, sha, branch){
 
 async function publishToGitHub(){
   readSettingsFromInputs();
-  if(!settings.pat){ toast("GitHub PAT를 입력해주세요","error"); return; }
+  const patError = validatePat();
+  if(patError){
+    toast(patError,"error");
+    $("settingsStatus").textContent = "❌ "+patError;
+    $("settingsPanel").classList.remove("hidden");
+    return;
+  }
   if(!settings.owner||!settings.repo||!settings.path){ toast("Owner/Repo/Path를 입력해주세요","error"); return; }
 
   const btn = $("publishConfirm");
@@ -805,6 +846,17 @@ document.addEventListener("DOMContentLoaded", ()=>{
   $("btnSaveSettings").addEventListener("click", saveSettings);
   $("btnTestConnection").addEventListener("click", testConnection);
   $("btnLoadFromGH").addEventListener("click", loadFromGitHub);
+
+  // 붙여넣기 직후 바로 문제를 알려준다
+  $("inputPAT").addEventListener("input", ()=>{
+    const el = $("inputPAT");
+    const { pat } = sanitizePat(el.value);
+    if(el.value !== pat) el.value = pat;
+    if(!pat){ $("settingsStatus").textContent = ""; return; }
+    settings.pat = pat;
+    const err = validatePat();
+    $("settingsStatus").textContent = err ? "⚠️ "+err : "";
+  });
 
   // Month nav
   $("prevMonthBtn").addEventListener("click", ()=>{ currentDate=new Date(currentDate.getFullYear(),currentDate.getMonth()-1,1); renderCalendar(); });
