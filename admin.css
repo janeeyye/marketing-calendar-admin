@@ -235,6 +235,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--foreground);line-h
   background:var(--card);border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;
   font-size:13px;line-height:1.8;
 }
+.publish-note{display:inline-block;margin-top:8px;color:var(--muted);font-size:12px}
 .commit-msg-label span{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}
 .commit-msg-label input{
   width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--border);

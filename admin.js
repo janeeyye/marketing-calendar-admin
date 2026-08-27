@@ -40,12 +40,18 @@ function loadSettings(){
 }
 
 function saveSettings(){
-  settings.pat = $("inputPAT").value.trim();
-  settings.owner = $("inputOwner").value.trim();
-  settings.repo = $("inputRepo").value.trim();
-  settings.path = $("inputPath").value.trim();
+  readSettingsFromInputs();
   localStorage.setItem("mcal_admin_settings", JSON.stringify(settings));
   toast("설정이 저장되었습니다","success");
+}
+
+// 입력창의 현재 값을 즉시 반영한다 ("설정 저장"을 누르지 않아도 게시가 동작하도록)
+function readSettingsFromInputs(){
+  settings.pat = $("inputPAT").value.trim();
+  settings.owner = $("inputOwner").value.trim() || "janeeyye";
+  settings.repo = $("inputRepo").value.trim() || "marketing-calendar-public";
+  settings.path = $("inputPath").value.trim() || "marketing-events.json";
+  return settings;
 }
 
 // ── Toast ──
@@ -59,16 +65,101 @@ function toast(msg, type="info"){
 }
 
 // ── GitHub API ──
+class GHError extends Error {
+  constructor(status, body){
+    super(`GitHub API ${status}: ${body}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+// 상태 코드를 사용자가 조치 가능한 한글 메시지로 변환한다
+function ghMessage(err){
+  if(!(err instanceof GHError)) return err.message || "알 수 없는 오류";
+  switch(err.status){
+    case 401: return "PAT가 올바르지 않거나 만료되었습니다. 새 토큰을 발급해 다시 입력해주세요.";
+    case 403: return "권한이 없습니다. PAT에 Contents(쓰기) 권한이 있는지 확인해주세요. (fine-grained PAT는 해당 레포를 Repository access에 포함해야 합니다)";
+    case 404: return `레포지토리 또는 파일을 찾을 수 없습니다 (${settings.owner}/${settings.repo}/${settings.path}). 경로와 PAT 권한을 확인해주세요.`;
+    case 409: return "파일이 다른 곳에서 먼저 변경되었습니다. 다시 불러온 뒤 게시해주세요.";
+    case 422: return "요청 형식이 올바르지 않습니다 (SHA 불일치 또는 브랜치 오류).";
+    default: return err.message;
+  }
+}
+
 async function ghFetch(endpoint, opts={}){
   const base = "https://api.github.com";
-  const headers = { Accept:"application/vnd.github.v3+json", ...opts.headers };
+  const headers = { Accept:"application/vnd.github+json", ...opts.headers };
   if(settings.pat) headers.Authorization = "Bearer "+settings.pat;
   const res = await fetch(base+endpoint, { ...opts, headers });
   if(!res.ok){
     const body = await res.text();
-    throw new Error(`GitHub API ${res.status}: ${body}`);
+    throw new GHError(res.status, body);
   }
   return res.json();
+}
+
+// 큰 JSON(수만 바이트)에서 String.fromCharCode(...bytes)가 스택 오버플로를 일으키므로 청크 단위로 인코딩한다
+function toBase64Utf8(str){
+  const bytes = new TextEncoder().encode(str);
+  const CHUNK = 0x8000;
+  let binary = "";
+  for(let i=0;i<bytes.length;i+=CHUNK){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i+CHUNK));
+  }
+  return btoa(binary);
+}
+
+// ── Local draft (편집 내용 유실 방지) ──
+const DRAFT_KEY = "mcal_admin_draft";
+
+function saveDraft(){
+  try{
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      events: allEvents, highlights, onDemand, quickLinks, savedAt: new Date().toISOString(),
+    }));
+  } catch(e){ console.warn("draft 저장 실패", e); }
+}
+
+function loadDraft(){
+  try{ return JSON.parse(localStorage.getItem(DRAFT_KEY)); } catch(e){ return null; }
+}
+
+function clearDraft(){ localStorage.removeItem(DRAFT_KEY); }
+
+function applyDraft(draft){
+  allEvents = (draft.events||[]).map(e=>({id:e.id||uid(),...e}));
+  highlights = draft.highlights||[];
+  onDemand   = draft.onDemand||[];
+  quickLinks = draft.quickLinks||[];
+}
+
+async function testConnection(){
+  readSettingsFromInputs();
+  const status = $("settingsStatus");
+  if(!settings.pat){ status.textContent = "❌ PAT를 먼저 입력해주세요"; return; }
+  status.textContent = "연결 확인 중…";
+  try{
+    const repoData = await ghFetch(`/repos/${settings.owner}/${settings.repo}`);
+    const perms = repoData.permissions||{};
+    if(!(perms.push||perms.admin)){
+      status.textContent = "⚠️ 읽기만 가능합니다 — PAT에 Contents 쓰기 권한이 필요합니다";
+      toast("쓰기 권한이 없어 게시할 수 없습니다","error");
+      return;
+    }
+    try{
+      const file = await ghFetch(`/repos/${settings.owner}/${settings.repo}/contents/${encodeURIComponent(settings.path)}?ref=${repoData.default_branch}`);
+      fileSha = file.sha;
+      status.textContent = `✅ 연결 정상 — 쓰기 가능 (${settings.path})`;
+    } catch(e){
+      if(e.status===404) status.textContent = `✅ 연결 정상 — ${settings.path}는 게시 시 새로 생성됩니다`;
+      else throw e;
+    }
+    toast("GitHub 연결 정상","success");
+  } catch(err){
+    status.textContent = "❌ 연결 실패";
+    toast("연결 실패: "+ghMessage(err),"error");
+    console.error(err);
+  }
 }
 
 async function autoLoadPublic(){
@@ -81,82 +172,173 @@ async function autoLoadPublic(){
     const res = await fetch(url, { cache:"no-store" });
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    allEvents = (Array.isArray(json) ? json : (json.events||[])).map((e,i)=>({id:e.id||uid(),...e}));
-    highlights = Array.isArray(json) ? [] : (json.highlights||[]);
-    onDemand   = Array.isArray(json) ? [] : (json.onDemand||[]);
-    quickLinks = Array.isArray(json) ? [] : (json.quickLinks||[]);
+    applyLoadedJson(json);
     // fileSha is needed for publishing; fetch it via API if PAT exists
     if(settings.pat){
       try{
-        const data = await ghFetch(`/repos/${owner}/${repo}/contents/${path}`);
+        const data = await ghFetch(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`);
         fileSha = data.sha;
       } catch(e){ console.warn("SHA fetch failed, will retry on publish", e); }
     }
-    dirty = false;
+    markClean();
     $("settingsStatus").textContent = `✅ ${allEvents.length}개 이벤트 로드됨`;
     toast(`${allEvents.length}개 이벤트를 불러왔습니다`,"success");
+    offerDraftRestore();
     renderAll();
   } catch(err){
     $("settingsStatus").textContent = "❌ 로드 실패";
     toast("이벤트 불러오기 실패: "+err.message,"error");
     console.error(err);
+    offerDraftRestore();
     renderAll();
   }
 }
 
+function applyLoadedJson(json){
+  allEvents = (Array.isArray(json) ? json : (json.events||[])).map(e=>({id:e.id||uid(),...e}));
+  highlights = Array.isArray(json) ? [] : (json.highlights||[]);
+  onDemand   = Array.isArray(json) ? [] : (json.onDemand||[]);
+  quickLinks = Array.isArray(json) ? [] : (json.quickLinks||[]);
+}
+
+// 게시되지 않은 로컬 편집이 있으면 공개본으로 덮어쓰지 않고 복구 여부를 묻는다
+function offerDraftRestore(){
+  const draft = loadDraft();
+  if(!draft || !draft.savedAt) return;
+
+  // 공개본과 내용이 같으면 물어볼 필요가 없다
+  const current = JSON.stringify({ events:allEvents, highlights, onDemand, quickLinks });
+  const saved = JSON.stringify({
+    events: draft.events||[], highlights: draft.highlights||[],
+    onDemand: draft.onDemand||[], quickLinks: draft.quickLinks||[],
+  });
+  if(current === saved){ clearDraft(); return; }
+
+  const when = new Date(draft.savedAt).toLocaleString("ko-KR");
+  if(confirm(`아직 게시하지 않은 편집 내용이 있습니다 (${when}).\n복구하시겠습니까?\n\n[취소]를 누르면 공개 캘린더 내용으로 시작합니다.`)){
+    applyDraft(draft);
+    markDirty();
+    $("settingsStatus").textContent = `✏️ 미게시 편집본 복구됨 (이벤트 ${allEvents.length}개)`;
+    toast("미게시 편집 내용을 복구했습니다","info");
+  } else {
+    // 실수로 거절하거나 브라우저가 dialog를 차단한 경우를 대비해 바로 지우지 않고 백업해 둔다
+    try{ localStorage.setItem(DRAFT_KEY+"_discarded", JSON.stringify(draft)); } catch(e){}
+    clearDraft();
+  }
+}
+
 async function loadFromGitHub(){
+  readSettingsFromInputs();
   if(!settings.owner||!settings.repo||!settings.path){
     toast("먼저 GitHub 설정을 입력해주세요","error"); return;
   }
+  if(dirty && !confirm("게시하지 않은 변경사항이 있습니다. GitHub 내용으로 덮어쓸까요?")) return;
   $("settingsStatus").textContent = "불러오는 중…";
   try{
-    const data = await ghFetch(`/repos/${settings.owner}/${settings.repo}/contents/${settings.path}`);
+    const data = await ghFetch(`/repos/${settings.owner}/${settings.repo}/contents/${encodeURIComponent(settings.path)}`);
     fileSha = data.sha;
     const binary = atob(data.content.replace(/\n/g,""));
     const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-    const json = JSON.parse(new TextDecoder("utf-8").decode(bytes));
-    allEvents = (Array.isArray(json) ? json : (json.events||[])).map((e,i)=>({id:e.id||uid(),...e}));
-    highlights = Array.isArray(json) ? [] : (json.highlights||[]);
-    onDemand   = Array.isArray(json) ? [] : (json.onDemand||[]);
-    quickLinks = Array.isArray(json) ? [] : (json.quickLinks||[]);
-    dirty = false;
+    applyLoadedJson(JSON.parse(new TextDecoder("utf-8").decode(bytes)));
+    clearDraft();
+    markClean();
     $("settingsStatus").textContent = `✅ ${allEvents.length}개 이벤트 로드됨`;
     toast(`${allEvents.length}개 이벤트를 불러왔습니다`,"success");
     renderAll();
   } catch(err){
     $("settingsStatus").textContent = "❌ 로드 실패";
-    toast("GitHub에서 불러오기 실패: "+err.message,"error");
+    toast("GitHub에서 불러오기 실패: "+ghMessage(err),"error");
     console.error(err);
   }
 }
 
+// 게시 직전에 항상 최신 SHA를 다시 읽는다 (오래된 SHA로 인한 409 방지)
+async function fetchLatestSha(branch){
+  try{
+    const ref = branch ? `?ref=${encodeURIComponent(branch)}` : "";
+    const data = await ghFetch(`/repos/${settings.owner}/${settings.repo}/contents/${encodeURIComponent(settings.path)}${ref}`);
+    return data.sha;
+  } catch(e){
+    if(e instanceof GHError && e.status===404) return null; // 새 파일
+    throw e;
+  }
+}
+
+async function putContent(content, msg, sha, branch){
+  const body = { message: msg, content, branch };
+  if(sha) body.sha = sha;
+  return ghFetch(`/repos/${settings.owner}/${settings.repo}/contents/${encodeURIComponent(settings.path)}`,{
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(body),
+  });
+}
+
 async function publishToGitHub(){
-  if(!settings.pat){ toast("GitHub PAT를 설정해주세요","error"); return; }
+  readSettingsFromInputs();
+  if(!settings.pat){ toast("GitHub PAT를 입력해주세요","error"); return; }
+  if(!settings.owner||!settings.repo||!settings.path){ toast("Owner/Repo/Path를 입력해주세요","error"); return; }
+
+  const btn = $("publishConfirm");
+  const btnLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "게시 중…";
+
   const msg = $("commitMessage").value.trim() || "캘린더 업데이트";
   const jsonObj = { events:allEvents, highlights, onDemand, quickLinks };
-  const content = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(jsonObj, null, 2))));
+
   try{
-    // Ensure we have fileSha for update
-    if(!fileSha){
-      try{
-        const data = await ghFetch(`/repos/${settings.owner}/${settings.repo}/contents/${settings.path}`);
-        fileSha = data.sha;
-      } catch(e){ /* new file */ }
+    const content = toBase64Utf8(JSON.stringify(jsonObj, null, 2));
+
+    const repoData = await ghFetch(`/repos/${settings.owner}/${settings.repo}`);
+    const branch = repoData.default_branch || "main";
+    const perms = repoData.permissions||{};
+    if(!(perms.push||perms.admin)){
+      throw new GHError(403, "no write permission");
     }
-    const body = { message:msg, content };
-    if(fileSha) body.sha = fileSha;
-    const res = await ghFetch(`/repos/${settings.owner}/${settings.repo}/contents/${settings.path}`,{
-      method:"PUT",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify(body),
-    });
+
+    let sha = await fetchLatestSha(branch);
+    let res;
+    try{
+      res = await putContent(content, msg, sha, branch);
+    } catch(e){
+      // 다른 곳에서 먼저 변경된 경우 최신 SHA로 1회 자동 재시도
+      if(e instanceof GHError && (e.status===409 || e.status===422)){
+        sha = await fetchLatestSha(branch);
+        res = await putContent(content, msg, sha, branch);
+      } else throw e;
+    }
+
     fileSha = res.content.sha;
-    dirty = false;
-    toast("✅ 게시 완료! 공개 사이트에 반영됩니다","success");
+    clearDraft();
+    markClean();
     closeModal("publishModal");
+    toast("✅ 게시 완료! 공개 사이트 반영까지 1~2분 걸릴 수 있습니다","success");
+    verifyPublished(branch, allEvents.length);
   } catch(err){
-    toast("게시 실패: "+err.message,"error");
+    toast("게시 실패: "+ghMessage(err),"error");
+    $("settingsStatus").textContent = "❌ 게시 실패 — "+ghMessage(err);
+    $("settingsPanel").classList.remove("hidden");
     console.error(err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = btnLabel;
+  }
+}
+
+// 게시 후 실제 공개 파일이 갱신됐는지 확인 (CDN 캐시로 지연될 수 있으므로 실패해도 오류로 취급하지 않는다)
+async function verifyPublished(branch, expectedCount){
+  try{
+    const url = `https://raw.githubusercontent.com/${settings.owner}/${settings.repo}/${branch}/${settings.path}?t=${Date.now()}`;
+    const res = await fetch(url, { cache:"no-store" });
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const json = await res.json();
+    const count = (Array.isArray(json)?json:(json.events||[])).length;
+    $("settingsStatus").textContent = count===expectedCount
+      ? `✅ 게시 확인됨 (이벤트 ${count}개)`
+      : `⏳ 게시됨 — 공개본 반영 대기 중 (현재 ${count}개)`;
+  } catch(e){
+    $("settingsStatus").textContent = "⏳ 게시됨 — 공개본 반영 대기 중";
   }
 }
 
@@ -541,18 +723,22 @@ function markDirty(){
   $("btnPublish").textContent = "🚀 게시 (변경사항 있음)";
   $("btnPublish").style.animation = "none";
   void $("btnPublish").offsetWidth; // reflow
+  saveDraft();
+}
+
+function markClean(){
+  dirty = false;
+  $("btnPublish").textContent = "🚀 게시";
 }
 
 // ── Publish flow ──
 function openPublishDialog(){
-  if(!dirty && allEvents.length>0){
-    toast("변경사항이 없습니다","info"); return;
-  }
+  const note = dirty ? "" : `<br><span class="publish-note">변경사항이 없지만 현재 내용을 그대로 다시 게시할 수 있습니다.</span>`;
   $("publishStats").innerHTML = `
     📅 이벤트: <strong>${allEvents.length}</strong>개<br>
     🔥 하이라이트: <strong>${highlights.length}</strong>개<br>
     ▶ 다시보기: <strong>${onDemand.length}</strong>개<br>
-    ↗ 바로가기: <strong>${quickLinks.length}</strong>개
+    ↗ 바로가기: <strong>${quickLinks.length}</strong>개${note}
   `;
   $("commitMessage").value = "캘린더 업데이트 " + fmtISO(new Date());
   openModal("publishModal");
@@ -617,6 +803,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
   // Settings
   $("settingsToggle").addEventListener("click", ()=>$("settingsPanel").classList.toggle("hidden"));
   $("btnSaveSettings").addEventListener("click", saveSettings);
+  $("btnTestConnection").addEventListener("click", testConnection);
   $("btnLoadFromGH").addEventListener("click", loadFromGitHub);
 
   // Month nav
