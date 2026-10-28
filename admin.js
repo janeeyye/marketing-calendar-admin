@@ -203,18 +203,16 @@ async function autoLoadPublic(){
   const path = settings.path || "marketing-events.json";
   $("settingsStatus").textContent = "불러오는 중…";
   try{
-    const url = `https://raw.githubusercontent.com/${owner}/${repo}/main/${path}`;
-    const res = await fetch(url, { cache:"no-store" });
-    if(!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    applyLoadedJson(json);
-    // fileSha is needed for publishing; fetch it via API if PAT exists
-    if(settings.pat){
-      try{
-        const data = await ghFetch(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`);
-        fileSha = data.sha;
-      } catch(e){ console.warn("SHA fetch failed, will retry on publish", e); }
-    }
+    // Raw CDN은 이전 내용을 반환할 수 있으므로 내용과 SHA를 같은 API 응답에서 읽는다.
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?t=${Date.now()}`;
+    const res = await fetch(url, {
+      cache:"no-store",
+      headers:{ Accept:"application/vnd.github+json" },
+    });
+    if(!res.ok) throw new GHError(res.status, await res.text());
+    const data = await res.json();
+    applyLoadedJson(parseGitHubJson(data));
+    fileSha = data.sha;
     markClean();
     $("settingsStatus").textContent = `✅ ${allEvents.length}개 이벤트 로드됨`;
     toast(`${allEvents.length}개 이벤트를 불러왔습니다`,"success");
@@ -222,11 +220,17 @@ async function autoLoadPublic(){
     renderAll();
   } catch(err){
     $("settingsStatus").textContent = "❌ 로드 실패";
-    toast("이벤트 불러오기 실패: "+err.message,"error");
+    toast("이벤트 불러오기 실패: "+ghMessage(err),"error");
     console.error(err);
     offerDraftRestore();
     renderAll();
   }
+}
+
+function parseGitHubJson(data){
+  const binary = atob(data.content.replace(/\s/g,""));
+  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+  return JSON.parse(new TextDecoder("utf-8").decode(bytes));
 }
 
 function applyLoadedJson(json){
@@ -271,10 +275,8 @@ async function loadFromGitHub(){
   $("settingsStatus").textContent = "불러오는 중…";
   try{
     const data = await ghFetch(`/repos/${settings.owner}/${settings.repo}/contents/${encodeURIComponent(settings.path)}`);
+    applyLoadedJson(parseGitHubJson(data));
     fileSha = data.sha;
-    const binary = atob(data.content.replace(/\n/g,""));
-    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-    applyLoadedJson(JSON.parse(new TextDecoder("utf-8").decode(bytes)));
     clearDraft();
     markClean();
     $("settingsStatus").textContent = `✅ ${allEvents.length}개 이벤트 로드됨`;
@@ -327,9 +329,10 @@ async function publishToGitHub(){
 
   const msg = $("commitMessage").value.trim() || "캘린더 업데이트";
   const jsonObj = { events:allEvents, highlights, onDemand, quickLinks };
+  const jsonText = JSON.stringify(jsonObj, null, 2);
 
   try{
-    const content = toBase64Utf8(JSON.stringify(jsonObj, null, 2));
+    const content = toBase64Utf8(jsonText);
 
     const repoData = await ghFetch(`/repos/${settings.owner}/${settings.repo}`);
     const branch = repoData.default_branch || "main";
@@ -355,7 +358,7 @@ async function publishToGitHub(){
     markClean();
     closeModal("publishModal");
     toast("✅ 게시 완료! 공개 사이트 반영까지 1~2분 걸릴 수 있습니다","success");
-    verifyPublished(branch, allEvents.length);
+    verifyPublished(res.commit.sha, jsonText);
   } catch(err){
     toast("게시 실패: "+ghMessage(err),"error");
     $("settingsStatus").textContent = "❌ 게시 실패 — "+ghMessage(err);
@@ -367,19 +370,19 @@ async function publishToGitHub(){
   }
 }
 
-// 게시 후 실제 공개 파일이 갱신됐는지 확인 (CDN 캐시로 지연될 수 있으므로 실패해도 오류로 취급하지 않는다)
-async function verifyPublished(branch, expectedCount){
+// 이벤트 수가 같아도 제목·링크가 다를 수 있으므로 저장한 커밋의 전체 내용을 대조한다.
+async function verifyPublished(commitSha, expectedText){
   try{
-    const url = `https://raw.githubusercontent.com/${settings.owner}/${settings.repo}/${branch}/${settings.path}?t=${Date.now()}`;
-    const res = await fetch(url, { cache:"no-store" });
-    if(!res.ok) throw new Error("HTTP "+res.status);
-    const json = await res.json();
+    const data = await ghFetch(`/repos/${settings.owner}/${settings.repo}/contents/${encodeURIComponent(settings.path)}?ref=${encodeURIComponent(commitSha)}`);
+    const json = parseGitHubJson(data);
+    if(JSON.stringify(json)!==JSON.stringify(JSON.parse(expectedText))){
+      throw new Error("저장된 내용이 게시한 내용과 다릅니다");
+    }
     const count = (Array.isArray(json)?json:(json.events||[])).length;
-    $("settingsStatus").textContent = count===expectedCount
-      ? `✅ 게시 확인됨 (이벤트 ${count}개)`
-      : `⏳ 게시됨 — 공개본 반영 대기 중 (현재 ${count}개)`;
+    $("settingsStatus").textContent = `✅ GitHub 저장 확인됨 (이벤트 ${count}개) — 공개 사이트는 배포 후 반영`;
   } catch(e){
-    $("settingsStatus").textContent = "⏳ 게시됨 — 공개본 반영 대기 중";
+    $("settingsStatus").textContent = "⚠️ 저장 요청은 성공했지만 내용 확인 실패 — "+ghMessage(e);
+    console.error(e);
   }
 }
 
