@@ -668,6 +668,7 @@ function openAddEvent(defaultDate){
   $("formTime").value = "";
   $("formRegUrl").value = "";
   $("eventFormDelete").classList.add("hidden");
+  syncEndDateMin();
   openModal("eventModal");
 }
 
@@ -682,10 +683,25 @@ function openEditEvent(ev){
   $("formTime").value = ev.time||"";
   $("formRegUrl").value = ev.registrationUrl||"";
   $("eventFormDelete").classList.remove("hidden");
+  syncEndDateMin();
   openModal("eventModal");
 }
 
+// 시작일을 바꾸면 종료일 최소값을 맞추고, 종료일이 시작일보다 앞서면 시작일로 보정한다
+function syncEndDateMin(){
+  const start = $("formStartDate").value, endEl = $("formEndDate");
+  endEl.min = start || "";
+  if(start && endEl.value && endEl.value < start) endEl.value = start;
+}
+$("formStartDate").addEventListener("change", syncEndDateMin);
+
 function saveEvent(){
+  const start = $("formStartDate").value, end = $("formEndDate").value;
+  if(start && end && end < start){
+    $("formEndDate").value = start;
+    toast("종료일은 시작일보다 앞설 수 없습니다. 종료일을 확인해 주세요.","error");
+    return;
+  }
   const id = $("formEventId").value || uid();
   const ev = {
     id,
