@@ -443,7 +443,7 @@ function renderCalendar(){
       .sort((a,b)=>{
         const sa=(getPos(day.iso,a.startDate,a.endDate)==="single"||getPos(day.iso,a.startDate,a.endDate)==="start")?0:1;
         const sb=(getPos(day.iso,b.startDate,b.endDate)==="single"||getPos(day.iso,b.startDate,b.endDate)==="start")?0:1;
-        return sa-sb||(a.title||"").localeCompare(b.title||"");
+        return sa-sb||(b.solution==="All CSAs")-(a.solution==="All CSAs")||(a.title||"").localeCompare(b.title||"");
       })
       .forEach(ev=>{
         const pos = getPos(day.iso, ev.startDate, ev.endDate);
